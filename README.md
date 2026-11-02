@@ -14,7 +14,7 @@ own data (spaces, tabs, panes, agents). Everything that needs the Claude
 session behind an agent (questions and answers, tasks, recent calls, PR and
 issue, transcript) shows as a "Pending" card for now.
 
-Tracking issue: TODO(#?) — link the Overwatch integration issue here.
+Tracking issue: [#2](https://github.com/Dev10x-Guru/herdr-layout-dev10x/issues/2).
 
 See [overwatch/RECIPE.md](overwatch/RECIPE.md) for what it shows and how it
 is built.

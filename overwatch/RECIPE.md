@@ -132,9 +132,11 @@ own, and no fonts are set.
   is, so these are placeholder cards: the question and its answer buttons,
   callsign and summary, tasks, the tool call waiting to run, recent calls,
   PR and issue, and the transcript. They need the Overwatch link tracked in
-  this repo's issue (see README). Until then, answer in the terminal.
-- No `preview.png` yet: `herdr-app shot` needs the layout installed and
-  shown, which this build didn't do. The layout has no `preview` field.
+  this repo's issue #2. Until then, answer in the terminal.
+- No `preview.png` yet: the layout loads with no errors in the app, but
+  `herdr-app shot` returned the window's last frame from before the
+  switch, and a shot of a real desk shows private terminals. Take it from
+  a demo space. The layout has no `preview` field.
 - `herdr-app check` renders with no spaces or agents, so it only proves the
   empty states. The tree, pane header and blocked Question only run inside
   the app.
