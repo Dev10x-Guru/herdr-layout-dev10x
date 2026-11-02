@@ -1,0 +1,105 @@
+{
+  "id": "ow-root",
+  "type": "row",
+  "background": "canvas",
+  "terminal_padding": [12, 10],
+  "divider": { "width": 1, "color": "border" },
+  "children": [
+    {
+      "id": "ow-sidebar",
+      "type": "block",
+      "size": { "px": 288 },
+      "min": 200,
+      "max": 520,
+      "background": "chrome",
+      "content": { "mod": "overwatch", "props": { "role": "tree" } }
+    },
+    {
+      "id": "ow-work",
+      "type": "column",
+      "resizable": false,
+      "children": [
+        {
+          "id": "ow-rail",
+          "type": "block",
+          "size": { "px": 40 },
+          "background": "chrome",
+          "border": { "width": 1, "color": "border" },
+          "content": { "mod": "overwatch", "props": { "role": "rail" } }
+        },
+        {
+          "id": "ow-terminals",
+          "type": "block",
+          "padding": 8,
+          "content": {
+            "tab": "active",
+            "pane": {
+              "gap": 8,
+              "radius": 8,
+              "background": "background",
+              "lone": true,
+              "border": { "width": 1, "color": "border" },
+              "focus": { "width": 1, "color": "accent" },
+              "header": {
+                "content": { "mod": "overwatch", "props": { "role": "pane" } },
+                "height": 30,
+                "position": "top",
+                "reveal": "always"
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "ow-side",
+      "type": "column",
+      "size": { "px": 380 },
+      "min": 300,
+      "max": 720,
+      "background": "chrome",
+      "divider": { "width": 1, "color": "border" },
+      "children": [
+        {
+          "id": "ow-answer",
+          "type": "block",
+          "size": { "weight": 2 },
+          "min": 140,
+          "content": { "mod": "overwatch", "props": { "role": "answer" } }
+        },
+        {
+          "id": "ow-side-lower",
+          "type": "column",
+          "size": { "weight": 3 },
+          "min": 220,
+          "resizable": false,
+          "children": [
+            {
+              "id": "ow-side-switch",
+              "type": "block",
+              "size": { "px": 34 },
+              "content": { "mod": "overwatch", "props": { "role": "switch", "stack": "ow-side-stack" } }
+            },
+            {
+              "id": "ow-side-stack",
+              "type": "stack",
+              "active": "ow-detail",
+              "children": [
+                {
+                  "id": "ow-detail",
+                  "type": "block",
+                  "content": { "mod": "overwatch", "props": { "role": "detail" } }
+                },
+                {
+                  "id": "ow-transcript",
+                  "type": "block",
+                  "content": { "mod": "overwatch", "props": { "role": "transcript" } }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
