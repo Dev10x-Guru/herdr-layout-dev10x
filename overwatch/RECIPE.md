@@ -45,13 +45,25 @@ Left to right, filling the window under the system title bar:
    - **Details / Transcript**: a 34px switch with two pills, then one of:
      - **Details**: "SESSION", then the agent's program icon, name and
        status chip; Title, Terminal, Folder, Branch and Working facts; its
-       live sub-agents. Then five "Pending" cards: Callsign and summary,
-       Tasks, Waiting to run, Recent calls, Pull request and issue.
-     - **Transcript**: "TRANSCRIPT" and a "Pending" card for the agent's
-       conversation.
+       live sub-agents. Then, read from the Claude session behind the
+       agent, up to five cards:
+       - **Session**: its title (custom title, else Claude's own) with the
+         first 8 characters of the session id.
+       - **Tasks**, "N/M done": open tasks with a status mark each, then a
+         "▸ N completed" line that unfolds the finished ones (in `muted`).
+       - **Waiting to run** (blocked) or **Running**: the tool's name and
+         its target (command, file, pattern, URL…) in the terminal font.
+       - **Recent calls**: the last 8 tool calls, newest first, each with
+         ✓ (`done`), ✕ (`blocked`) or … and its target.
+       - **Pull request and issue**: the ticket ID found in the branch, and
+         the branch's PR as "#N state" with its title.
+     - **Transcript**: "TRANSCRIPT", then the last 40 messages as bubbles,
+       newest at the bottom: yours ("YOU", on `selected`, indented left)
+       and Claude's ("CLAUDE", on `surface` with a `border`, indented
+       right), each cut at 600 characters.
 
-A "Pending" card is a 1px `border` box on `surface` with its title, a grey
-"Pending" chip and one line on what will show there.
+A card is a 1px `border` box on `surface` with 6px corners: its title, an
+optional `dim` note on the right, then its lines.
 
 Colors come only from `theme()` and the layout's theme names (`canvas`,
 `chrome`, `background`, `border`, `accent`); there is no palette of its
@@ -77,12 +89,27 @@ own, and no fonts are set.
 - The right column talks about one agent: the focused pane's agent when it
   is in the shown tab, else the shown tab's most urgent agent.
 - **Question**, when that agent is blocked: "<program> needs you" in
-  `blocked`, the terminal title, a Pending card for the question and
-  options, a "Go to its terminal" button (`pane.focus` on it) and, when
+  `blocked`, the terminal title, then what its Claude session waits on:
+  - An `AskUserQuestion` with one single-pick question: the question and
+    one button per option (label, and its description in `muted`).
+    Clicking option N sends `hc keys <agent> down×N enter` to the agent's
+    terminal and shows "Sent: <label>" (or "Couldn't answer: …" in
+    `blocked`); the buttons hide until the next question.
+  - Several questions, or a multi-pick one: a card per question listing
+    its options, and "answer in its terminal".
+  - Any other tool waiting for approval: a "<tool> wants to run" card with
+    its target.
+  - No readable session: "Its Claude session isn't readable here".
+  Then a "Go to its terminal" button (`pane.focus` on it) and, when
   another tab has a blocked agent, "Next waiting" (`agent.focus` on it).
   Otherwise: "Nothing in this tab is waiting for you." (or "No agent runs
   in this tab.") and up to six blocked agents elsewhere, each clickable
   (`agent.focus`).
+- Question, Details and Transcript each read the session of the agent they
+  show every 3s, and at once when that agent changes. A transcript is only
+  re-read when its size changed.
+- Details without a session says why: the agent isn't Claude Code, no
+  transcript was found for its folder, or it is still looking.
 - Clicking a sub-agent in Details peeks at it (`terminal.peek`).
 - The switch pills run `layout.select` on the stack; the shown pill is
   `selected`.
@@ -111,28 +138,62 @@ own, and no fonts are set.
 - **One mod** (`mods/overwatch/`, `place: "none"`): `main.js` picks a part
   by `props().role`; each part is its own module: `tree.js`, `rail.js`,
   `pane.js`, `answer.js`, `detail.js`, `transcript.js`, `switch.js`, with
-  shared marks, chips and the current-agent rule in `look.js`.
-- **Data:** `spaces()`, `panes()`, `agents()`, `terminals()` (sub-agents:
-  `parent`, `state`), `layout()` (the stack's `active`), `theme()`.
+  shared marks, chips, cards, buttons and the current-agent rule in
+  `look.js`, and the Claude session reading in `session.js`:
+  - `sessionOf(agent)` finds the transcript: a `claude.transcript` or
+    `claude.session` terminal label when one is set, else the newest
+    `.jsonl` files in `~/.claude/projects/<folder slug>/` (skipping team
+    members' transcripts, which name an `agentName`), paired with that
+    folder's Claude Code agents newest to newest by `seq`.
+  - `load(file)` reads the tail of the transcript and `parse()` turns it
+    into the session id, branch, the tool call waiting for a result, its
+    question, tasks (from `TaskCreate`/`TaskUpdate`, else the last
+    `TodoWrite`), recent calls and messages; cached by file size.
+  - `prOf(cwd, branch)` asks `gh` for the branch's PR, cached for 60s.
+  - `SessionWatch` keeps one part's agent loaded without blocking render.
+- **Data:** `spaces()`, `panes()` (`cwd`, `branch`), `agents()` (`app`,
+  `seq`), `terminals()` (sub-agents: `parent`, `state`; `labels`),
+  `layout()` (the stack's `active`), `theme()`, `settings()` (the terminal
+  font for tool targets), `home()`.
 - **Commands:** `space.select`, `space.new`, `tab.select`, `pane.focus`,
   `pane.split`, `pane.zoom`, `pane.close`, `agent.focus`, `terminal.peek`,
-  `layout.select`; `openOverlay` with the shipped `menu` mod; and
-  `setAgentOrder()`.
-- **Programs:** `git rev-parse --path-format=absolute --git-common-dir
-  --show-toplevel` via `exec`, once per space folder (on the space's
-  machine), to nest worktree spaces. Nothing else runs; no network.
+  `layout.select`; `openOverlay` with the shipped `menu` mod;
+  `setAgentOrder()`; and `hc keys <agent> down… enter` to pick an option.
+- **Programs** (via `exec`, on the local machine):
+  - `git rev-parse --path-format=absolute --git-common-dir --show-toplevel`,
+    once per space folder (on the space's machine), to nest worktree
+    spaces.
+  - `ls -t`, `head -c 4096`, `wc -c` to find and size transcripts;
+    `sh -c 'tail -c 6000000 | grep -E "type":"(user|assistant)" | tail -c
+    1000000'` to read one; `grep -ohE` for its title.
+  - `gh pr view --json number,title,state,url` in the agent's folder (the
+    only network call, done by `gh`).
 - **Timers:** the tree looks for new folders every 2s (git only for unseen
-  ones); rail and details redraw every 30s for the "working" times.
+  ones); Question, Details and Transcript poll their agent's session every
+  3s; rail and details redraw every 30s for the "working" times.
 - **Shipped art it borrows:** `mods/workspace-chrome/spinner.svg` and
   `branch.svg`, `mods/pane/{split-right,split-down,zoom,unzoom,close}.svg`.
 
 ## Watch out
 
-- **Pending, not built yet.** Herdr can't tell which Claude session an agent
-  is, so these are placeholder cards: the question and its answer buttons,
-  callsign and summary, tasks, the tool call waiting to run, recent calls,
-  PR and issue, and the transcript. They need the Overwatch link tracked in
-  this repo's issue #2. Until then, answer in the terminal.
+- **The transcript is a guess.** Herdr doesn't say which Claude session an
+  agent is. Without a `claude.transcript` / `claude.session` label, it
+  pairs the folder's Claude Code agents with its newest transcripts by
+  recency. Two agents in one folder can swap, a resumed old session can
+  show a newer one, and a fresh agent shows the previous session until it
+  writes. A hook that sets the label fixes it.
+- **Only the tail is read** (last 6MB, then at most 1MB of conversation
+  lines). On long sessions, tasks created earlier are missing or show as
+  "Task #N", the recent calls and messages are the latest only, and the
+  transcript says "The last N messages".
+- **Answering presses keys.** An option button sends Down N times, then
+  Enter, assuming Claude Code's picker opens on the first option and
+  nobody has moved it. If you arrowed in the terminal first, the wrong
+  option is picked. Several questions or multi-pick ones aren't answered
+  from here.
+- **The PR card needs `gh`** installed and logged in, in the agent's
+  folder; without it the PR line stays empty. Transcripts are read on this
+  machine only, so agents in remote spaces show no session.
 - No `preview.png` yet: the layout loads with no errors in the app, but
   `herdr-app shot` returned the window's last frame from before the
   switch, and a shot of a real desk shows private terminals. Take it from
@@ -159,5 +220,10 @@ own, and no fonts are set.
 - A blocked agent in the shown tab fills Question with "needs you" and "Go
   to its terminal" focuses it; one in another tab shows under "waiting
   elsewhere" and "Next waiting" goes there.
+- A Claude Code agent asking one single-pick question shows its options;
+  clicking one answers it in the terminal. One waiting on a tool shows
+  "<tool> wants to run".
+- Details shows the session's title, tasks, waiting call, recent calls and
+  the branch's PR; Transcript shows its latest messages.
 - The Details/Transcript pills switch the stack.
 - Switching the theme between light and dark recolors every part.
