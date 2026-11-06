@@ -9,10 +9,11 @@ Dev10x layouts for the [Herdr app](https://herdr.dev).
 ## Overwatch
 
 The Dev10x Session Overwatch page (`dev10x overwatch serve`), rebuilt as a
-native Herdr layout and mod. This is the first pass: a skeleton on Herdr's
-own data (spaces, tabs, panes, agents). Everything that needs the Claude
-session behind an agent (questions and answers, tasks, recent calls, PR and
-issue, transcript) shows as a "Pending" card for now.
+native Herdr layout and mod. The tree, terminals and rail run on Herdr's own
+data (spaces, tabs, panes, agents). The right column reads the Claude Code
+transcript behind each agent: its question with one-click answers, tasks,
+the tool call waiting to run, recent calls, the branch's PR and issue, and
+the conversation.
 
 Tracking issue: [#2](https://github.com/Dev10x-Guru/herdr-layout-dev10x/issues/2).
 
@@ -35,4 +36,8 @@ herdr-app do layout.switch --name overwatch
 `layouts/overwatch.json` and `mods/overwatch/`.
 
 The mod runs `git rev-parse` in each space's folder (to nest worktree
-spaces under their repo). It reaches no network and reads no files.
+spaces under their repo), reads Claude Code transcripts under
+`~/.claude/projects/` with `ls`, `head`, `wc`, `tail` and `grep`, answers
+questions with `hc keys`, and asks `gh pr view` for the branch's PR (its
+only network call). Its matching of agents to transcripts is a best guess;
+see Watch out in the recipe.

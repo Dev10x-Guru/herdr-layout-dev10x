@@ -80,14 +80,20 @@ export function heading(t, text) {
   return div().flex_none().text_size(11).font_semibold().text_color(t.dim).child(text.toUpperCase());
 }
 
-// A block for what Herdr can't tell yet: it names what will show there and what it waits on.
-export function pending(t, title, body) {
+export function card(t, title, aside, body) {
   return v_flex().flex_none().gap(6).p(10).rounded(6).border(1).border_color(t.border).bg(t.surface)
     .child(h_flex().gap(8).items_center()
       .child(div().flex_1().min_w(0).truncate().text_size(12.5).font_medium().text_color(t.foreground).child(title))
-      .child(div().flex_none().px(6).h(18).flex().items_center().rounded(5).bg(t.hover)
-        .text_size(10.5).font_semibold().text_color(t.dim).child("Pending")))
-    .child(div().text_size(12).text_color(t.muted).child(body));
+      .when(!!aside, (el) => el.child(div().flex_none().text_size(11).text_color(t.dim).child(aside))))
+    .children(body);
+}
+
+export function button(t, id, label, onClick) {
+  return div().id(id).flex_none().px(10).h(26).flex().items_center().rounded(6)
+    .bg(t.solid).text_color(t.solid_foreground).text_size(12).font_medium()
+    .hover((s) => s.opacity(0.9))
+    .on_click(onClick)
+    .child(label);
 }
 
 export function quiet(t, text) {
