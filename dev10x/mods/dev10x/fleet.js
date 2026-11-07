@@ -13,14 +13,17 @@ export const sessionAt = (address) => fleet().byAddress[address] ?? null;
 
 const localClaude = (p) => p.terminal && !p.terminal.includes("/") && p.program?.key === "claude";
 
-async function pidAt(address) {
-  const r = await hc(["get", address]).catch(() => null);
-  if (r?.code !== 0) return null;
+function parsed(text) {
   try {
-    return JSON.parse(r.stdout).foreground?.pid ?? null;
+    return JSON.parse(text);
   } catch {
     return null;
   }
+}
+
+async function pidAt(address) {
+  const r = await hc(["get", address]).catch(() => null);
+  return r?.code === 0 ? parsed(r.stdout)?.foreground?.pid ?? null : null;
 }
 
 function publish(next) {
@@ -35,11 +38,11 @@ function publish(next) {
 // and most running sessions live outside this window.
 export async function refreshFleet() {
   const r = await exec("claude", ["agents", "--json"]).catch((e) => ({ code: 1, stderr: String(e) }));
-  if (r.code !== 0) {
-    publish({ ...fleet(), at: Date.now(), error: r.stderr.trim() || "claude agents failed" });
+  const sessions = r.code === 0 ? parsed(r.stdout) : null;
+  if (!sessions) {
+    publish({ ...fleet(), at: Date.now(), error: r.stderr?.trim() || "claude agents failed" });
     return;
   }
-  const sessions = JSON.parse(r.stdout);
   const byPid = new Map(sessions.map((s) => [s.pid, s]));
   const byAddress = {};
   const here = new Set();
