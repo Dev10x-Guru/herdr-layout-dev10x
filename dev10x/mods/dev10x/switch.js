@@ -17,7 +17,7 @@ function loadOrder() {
   return [...new Set([...known, ...Object.keys(SIDE)])];
 }
 
-function movedBefore(order, dragged, target) {
+function movedTo(order, dragged, target) {
   const rest = order.filter((child) => child !== dragged);
   const from = order.indexOf(dragged);
   const to = order.indexOf(target);
@@ -47,7 +47,7 @@ export class Switch {
       run("layout.select", { stack, child });
       return;
     }
-    this.order = movedBefore(this.order, dragged, child);
+    this.order = movedTo(this.order, dragged, child);
     try {
       localStorage.setItem(ORDER_KEY, JSON.stringify(this.order));
     } catch (e) {
