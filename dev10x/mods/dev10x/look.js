@@ -1,0 +1,150 @@
+import { div, svg, image } from "gpui-kit";
+import { h_flex, v_flex } from "gpui-base";
+import { agents, home, panes, run, spaces } from "herdr";
+import { sessionAt, STATUS } from "./fleet.js";
+
+export const RANK = { blocked: 4, done: 3, working: 2, idle: 1 };
+
+export const WORD = { blocked: "Needs you", done: "Done", working: "Working", idle: "Idle" };
+
+const SPINNER = "mods/workspace-chrome/spinner.svg";
+
+export function strongest(statuses) {
+  return statuses.reduce((best, s) => ((RANK[s] ?? 0) > (RANK[best] ?? 0) ? s : best), null);
+}
+
+export function paneStatus(p) {
+  return strongest([p.status, STATUS[sessionAt(p.terminal)?.status]]);
+}
+
+export function tabStatus(tab) {
+  return strongest([tab.status, ...panes().filter((p) => p.tab === tab.id && p.terminal).map(paneStatus)]);
+}
+
+// Every terminal in this window that waits for the person, the shown tab's included.
+export function waitingHere() {
+  return spaces().flatMap((space) => space.tabs.flatMap((tab) => panes()
+    .filter((p) => p.tab === tab.id && p.terminal && paneStatus(p) === "blocked")
+    .map((p) => ({ address: p.terminal, space, tab, name: sessionAt(p.terminal)?.name ?? p.program?.name ?? p.title }))));
+}
+
+export function goTo({ address, space, tab }) {
+  run("space.select", { id: space.id });
+  run("tab.select", { id: tab.id });
+  run("pane.focus", { terminal: address });
+}
+
+export function mark(t, status) {
+  if (status === "working") return svg(SPINNER).size(12).flex_none().text_color(t.working).spin(900);
+  if (status === "blocked") {
+    return div().w(12).flex_none().text_size(11).text_color(t.blocked).child("◆")
+      .loop("opacity", { from: 0.45, to: 1, period: 1200 });
+  }
+  if (status === "done") return svg("mods/dev10x/check.svg").size(12).flex_none().text_color(t.done);
+  if (status === "idle") return div().size(7).mx(2.5).flex_none().rounded(4).border(1.5).border_color(t.idle ?? t.dim);
+  return div().w(12).flex_none();
+}
+
+export function chip(t, status) {
+  if (!status) return null;
+  const color = t[status] ?? t.dim;
+  return div().flex_none().px(6).h(18).flex().items_center().rounded(5)
+    .bg(color + "26").text_size(10.5).font_semibold().text_color(color).child(WORD[status]);
+}
+
+export function findNode(node, id) {
+  if (node?.id === id) return node;
+  for (const child of node?.children ?? []) {
+    const found = findNode(child, id);
+    if (found) return found;
+  }
+  return null;
+}
+
+export function programIcon(program, size, color) {
+  if (!program?.icon) return null;
+  return program.tint
+    ? svg(program.icon).size(size).flex_none().text_color(color)
+    : image(program.icon).w(size).h(size).flex_none();
+}
+
+export function paneName(p) {
+  return ((p.program?.agent || p.program?.shell) && p.program.name) || p.title || p.program?.name || "shell";
+}
+
+export function shortPath(path) {
+  if (!path) return "";
+  const h = home();
+  return path === h ? "~" : path.startsWith(h + "/") ? "~" + path.slice(h.length) : path;
+}
+
+export function since(ms) {
+  if (!ms) return "";
+  const m = Math.floor((Date.now() - ms) / 60000);
+  if (m < 1) return "<1m";
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  return h < 24 ? `${h}h` : `${Math.floor(h / 24)}d`;
+}
+
+export function activeSpace() {
+  return spaces().find((s) => s.active) ?? null;
+}
+
+export function activeTab() {
+  return activeSpace()?.tabs.find((t) => t.active) ?? null;
+}
+
+// The agent the right column talks about: the focused pane's agent when it's in the
+// shown tab, else the shown tab's most urgent agent.
+export function currentAgent() {
+  const tab = activeTab();
+  if (!tab) return null;
+  const mine = agents().filter((a) => a.tab === tab.id);
+  const focusedPane = panes().find((p) => p.focused && p.tab === tab.id);
+  return mine.find((a) => a.pane === focusedPane?.pane)
+    ?? [...mine].sort((x, y) => RANK[y.status] - RANK[x.status] || y.seq - x.seq)[0]
+    ?? null;
+}
+
+// The terminal the right column follows: the current agent, else the shown tab's focused
+// terminal pane, else its first one. Claude Code started in a shell isn't an agent to Herdr.
+export function currentTarget() {
+  const agent = currentAgent();
+  if (agent) return { address: agent.address, pane: agent.pane, app: agent.app, agent };
+  const tab = activeTab();
+  if (!tab) return null;
+  const mine = panes().filter((p) => p.tab === tab.id && p.terminal);
+  const p = mine.find((each) => each.focused) ?? mine[0];
+  return p ? { address: p.terminal, pane: p.pane, app: p.app, agent: null } : null;
+}
+
+export function currentStatus() {
+  const target = currentTarget();
+  const p = target && panes().find((each) => each.terminal === target.address);
+  return p ? paneStatus(p) : null;
+}
+
+export function heading(t, text) {
+  return div().flex_none().text_size(11).font_semibold().text_color(t.dim).child(text.toUpperCase());
+}
+
+export function card(t, title, aside, body) {
+  return v_flex().flex_none().gap(6).p(10).rounded(3).border(1).border_color(t.border).bg(t.surface)
+    .child(h_flex().gap(8).items_center()
+      .child(div().flex_1().min_w(0).truncate().text_size(12.5).font_medium().text_color(t.foreground).child(title))
+      .when(!!aside, (el) => el.child(div().flex_none().text_size(11).text_color(t.dim).child(aside))))
+    .children(body);
+}
+
+export function button(t, id, label, onClick) {
+  return div().id(id).flex_none().px(10).h(26).flex().items_center().rounded(3)
+    .bg(t.solid).text_color(t.solid_foreground).text_size(12).font_medium()
+    .hover((s) => s.opacity(0.9))
+    .on_click(onClick)
+    .child(label);
+}
+
+export function quiet(t, text) {
+  return div().text_size(12).text_color(t.muted).child(text);
+}
