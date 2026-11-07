@@ -1,0 +1,88 @@
+{
+  "id": "root",
+  "type": "row",
+  "theme": "dev10x",
+  "background": "canvas",
+  "terminal_padding": [14, 12],
+  "divider": { "width": 1, "color": "border" },
+  "children": [
+    {
+      "id": "sidebar",
+      "type": "block",
+      "size": { "px": 300 },
+      "min": 220,
+      "max": 520,
+      "background": "chrome",
+      "content": { "mod": "dev10x", "props": { "role": "sidebar" } }
+    },
+    {
+      "id": "work",
+      "type": "column",
+      "resizable": false,
+      "children": [
+        {
+          "id": "tabs",
+          "type": "block",
+          "size": { "px": 36 },
+          "content": { "mod": "dev10x", "props": { "role": "tabs" } }
+        },
+        {
+          "id": "main",
+          "type": "block",
+          "padding": 6,
+          "content": {
+            "tab": "active",
+            "pane": {
+              "gap": 6,
+              "radius": 3,
+              "background": "background",
+              "lone": true,
+              "border": { "width": 1, "color": "border" },
+              "focus": { "width": 1, "color": "accent" },
+              "header": {
+                "content": { "mod": "dev10x", "props": { "role": "pane" } },
+                "height": 28,
+                "position": "top",
+                "reveal": "always"
+              }
+            }
+          }
+        },
+        {
+          "id": "status",
+          "type": "block",
+          "size": { "px": 26 },
+          "content": { "mod": "dev10x", "props": { "role": "status" } }
+        }
+      ]
+    },
+    {
+      "id": "dx-side",
+      "type": "column",
+      "size": { "px": 380 },
+      "min": 280,
+      "max": 900,
+      "background": "canvas",
+      "resizable": false,
+      "children": [
+        {
+          "id": "dx-switch",
+          "type": "block",
+          "size": { "px": 36 },
+          "content": { "mod": "dev10x", "props": { "role": "switch", "stack": "dx-side-stack" } }
+        },
+        {
+          "id": "dx-side-stack",
+          "type": "stack",
+          "active": "dx-work",
+          "children": [
+            { "id": "dx-work", "type": "block", "content": { "mod": "dev10x", "props": { "role": "work" } } },
+            { "id": "dx-question", "type": "block", "content": { "mod": "dev10x", "props": { "role": "question" } } },
+            { "id": "files", "type": "block", "content": { "mod": "files" } },
+            { "id": "changes", "type": "block", "content": { "mod": "changes" } }
+          ]
+        }
+      ]
+    }
+  ]
+}
