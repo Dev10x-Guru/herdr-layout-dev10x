@@ -20,13 +20,19 @@ Left to right, filling the window under the system title bar:
      "14:18 · 2 working · 51 in all" (11.5px, `muted`).
    - A filter with only a bottom border, "Filter by name, branch, ticket".
    - A switch "Hide idle and done" with the count it would hide.
-   - Rows of 28px, square, with a 2px left bar. The shown session has `selected`
-     behind it, a `foreground` bar and a semibold name.
-     - **Project** (a repo, its linked worktrees folded in): caret, status mark,
-       semibold name, session count. A project with one shown session is one row:
-       the project, the session's name in 11.5px `dim`, then its refs.
-     - **Session**, 16px in: status mark, name, refs (ticket when the name doesn't
-       already carry it, `#PR`, "N agents" above one).
+   - Rows of 28px, square, with a 2px left bar (clear unless shown). The shown
+     session has `selected` behind it, a `foreground` bar and a semibold name.
+   - Each project is one band: its root row and its session rows share a
+     background, a 1px `border` line on top. Every other band adds `foreground`
+     at 4% (`#…0a`), so where one project ends is visible without reading names.
+     - **Project** (a repo, its linked worktrees folded in): a 14px caret slot,
+       status mark, semibold name, session count. A project with one shown session
+       is one row with the same slot and mark: the project, the session's name in
+       11.5px `dim`, then its refs. Every root lines up the same way.
+     - **Session**, under its project: a 1px `border` guide below the project's
+       mark, then the status mark below the project's name, the name and refs
+       (ticket when the name doesn't already carry it, `#PR`, "N agents" above
+       one). A session can never sit where a root does, with or without a mark.
      - A space with no running session is one quiet row without a mark.
      - "PINNED" above the projects when anything is pinned.
      - "OUTSIDE THIS WINDOW" lists sessions that wait for you but run in no

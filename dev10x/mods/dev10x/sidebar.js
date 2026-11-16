@@ -6,7 +6,12 @@ import { mark, strongest, tabStatus } from "./look.js";
 import { prOf, ticketOf } from "./session.js";
 
 const ROW = 28;
-const INDENT = 16;
+// Roots start at ROOT_PAD; a child's guide sits under the root's mark and its mark under the root's name.
+const ROOT_PAD = 6;
+const CHILD_PAD = 32;
+const CLEAR = "#00000000";
+// Every other project gets this much foreground over the rail, so a root and its children read as one band.
+const BAND = "0a";
 const FLEET_MS = 5000;
 const PR_TTL_MS = 300000;
 const NO_PR = new Set(["main", "master", "develop", "trunk"]);
@@ -220,12 +225,19 @@ export class Sidebar {
     };
   }
 
-  row(t, id, depth, selected) {
-    return h_flex().id(id).h(ROW).flex_none().pl(6 + depth * INDENT).pr(6).gap(7).items_center()
+  row(t, id, pad, selected) {
+    return h_flex().id(id).h(ROW).flex_none().pl(pad).pr(6).gap(7).items_center()
       .text_size(13).border_l(2)
       .on_hover(this.hover(id))
       .when(selected, (el) => el.bg(t.selected).border_color(t.foreground))
-      .when(!selected, (el) => el.border_color(t.chrome).hover((s) => s.bg(t.hover)));
+      .when(!selected, (el) => el.border_color(CLEAR).hover((s) => s.bg(t.hover)));
+  }
+
+  // One project's rows on a shared background, alternating down the rail.
+  band(t, index, rows) {
+    return v_flex().flex_none().border_t(1).border_color(t.border)
+      .when(index % 2 === 1, (el) => el.bg(t.foreground + BAND))
+      .children(rows);
   }
 
   control(t, id, label, onClick) {
@@ -285,11 +297,14 @@ export class Sidebar {
     ].filter(Boolean);
   }
 
-  sessionRow(t, s, depth, withProject) {
+  sessionRow(t, s, child, withProject) {
     const id = `dx-s-${s.key}`;
     const selected = s.space.active && s.tab.active;
-    return this.row(t, id, depth, selected)
+    return this.row(t, id, child ? CHILD_PAD : ROOT_PAD, selected)
       .on_click(() => this.open(s))
+      .child(child
+        ? div().w(1).h_full().flex_none().bg(t.border)
+        : div().w(14).flex_none())
       .child(mark(t, s.status))
       .child(div().flex_1().min_w(0).truncate()
         .text_color(selected ? t.foreground : t.muted)
@@ -305,7 +320,7 @@ export class Sidebar {
   singleRow(t, p, s) {
     const id = `dx-p-${p.home.id}`;
     const selected = s.space.active && s.tab.active;
-    return this.row(t, id, 0, selected)
+    return this.row(t, id, ROOT_PAD, selected)
       .on_click(() => this.open(s))
       .child(div().w(14).flex_none())
       .child(mark(t, s.status))
@@ -323,7 +338,7 @@ export class Sidebar {
   projectRow(t, p, count) {
     const id = `dx-p-${p.home.id}`;
     const open = !this.folded.has(p.key);
-    return this.row(t, id, 0, false)
+    return this.row(t, id, ROOT_PAD, false)
       .on_click((_e, cx) => {
         this.folded.has(p.key) ? this.folded.delete(p.key) : this.folded.add(p.key);
         localStorage.setItem("folded", JSON.stringify([...this.folded]));
@@ -358,23 +373,21 @@ export class Sidebar {
     const pinned = projects.flatMap((p) => p.sessions).filter((s) => this.pins.includes(s.key) && this.visible(s));
     if (pinned.length) {
       rows.push(this.groupHead(t, "PINNED"));
-      for (const s of pinned) {
-        rows.push(this.sessionRow(t, s, 0, true));
-        order.push(...s.agents);
-      }
+      rows.push(this.band(t, 0, pinned.map((s) => this.sessionRow(t, s, false, true))));
+      order.push(...pinned.flatMap((s) => s.agents));
       rows.push(this.groupHead(t, "PROJECTS"));
     }
+    let bands = 0;
     for (const p of projects) {
       const sessions = p.sessions.filter((s) => !this.pins.includes(s.key) && this.visible(s)).sort(blockedFirst);
       if (!sessions.length) continue;
       this.shown.push(p.key);
       order.push(...sessions.flatMap((s) => s.agents));
-      if (sessions.length === 1) {
-        rows.push(this.singleRow(t, p, sessions[0]));
-        continue;
-      }
-      rows.push(this.projectRow(t, p, sessions.length));
-      if (!this.folded.has(p.key)) rows.push(...sessions.map((s) => this.sessionRow(t, s, 1, false)));
+      const group = sessions.length === 1
+        ? [this.singleRow(t, p, sessions[0])]
+        : [this.projectRow(t, p, sessions.length),
+          ...(this.folded.has(p.key) ? [] : sessions.map((s) => this.sessionRow(t, s, true, false)))];
+      rows.push(this.band(t, bands++, group));
     }
     const out = fleet().elsewhere
       .filter((s) => s.status === "waiting" && this.matches([s.name, s.cwd, ticketOf(s.name)]));
