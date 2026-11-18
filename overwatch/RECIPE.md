@@ -39,7 +39,7 @@ Left to right, filling the window under the system title bar:
      icon, name, folder (`~`-shortened) and branch.
 3. **The right column**, 380px (drag between 300 and 720px), `chrome`, in
    two parts split 2:3 with a 1px `border` divider:
-   - **Question**: "QUESTION" with "N waiting elsewhere" (in `blocked`) on
+   - **Question**: "QUESTION" with "N more waiting" (in `blocked`) on
      the right. What follows depends on the agent the column talks about
      (see How it behaves).
    - **Details / Transcript**: a 34px switch with two pills, then one of:
@@ -78,18 +78,26 @@ own, and no fonts are set.
 | done | a 7px dot in `done` | — |
 | idle | a 7px ring in `idle` | — |
 
-- Spaces and tabs show the most urgent status of their agents (blocked >
-  done > working > idle); Herdr computes it. Rows keep Herdr's own order.
+- A pane shows Herdr's status, or its Claude session's when Herdr has
+  none. Spaces and tabs show the most urgent of Herdr's own status and
+  their panes' (blocked > done > working > idle), so a waiting session
+  started in a shell still marks its tab and space. Rows keep Herdr's own
+  order.
 - Click a space: `space.select`. Click a tab: its space, then
   `tab.select`. Click a pane: its space and tab, then `pane.focus`.
   Click a caret: fold or unfold that space or tab (remembered).
   Right-click a space: Herdr's own space menu. `+`: `space.new`.
 - "Needs you only" keeps only blocked spaces, tabs and panes; click again
   ("Show all") to undo. Remembered.
-- The right column talks about one agent: the focused pane's agent when it
-  is in the shown tab, else the shown tab's most urgent agent.
-- **Question**, when that agent is blocked: "<program> needs you" in
-  `blocked`, the terminal title, then what its Claude session waits on:
+- The right column talks about one terminal: the shown tab's focused pane
+  when an agent or a Claude session runs there, else the tab's most urgent
+  pane, else the focused or first one. Its
+  Claude session is the one `claude agents --json` reports for that
+  terminal's process, so a Claude session started in a plain shell counts
+  even when Herdr shows no agent there.
+- **Question**, when that terminal is blocked or its session has a pending
+  question: "<program> needs you" in `blocked`, the session's name and what
+  it waits for (`·`-joined), then what it waits on:
   - An `AskUserQuestion` with one single-pick question: the question and
     one button per option (label, and its description in `muted`).
     Clicking option N sends `hc keys <agent> down×N enter` to the agent's
@@ -101,10 +109,12 @@ own, and no fonts are set.
     its target.
   - No readable session: "Its Claude session isn't readable here".
   Then a "Go to its terminal" button (`pane.focus` on it) and, when
-  another tab has a blocked agent, "Next waiting" (`agent.focus` on it).
-  Otherwise: "Nothing in this tab is waiting for you." (or "No agent runs
-  in this tab.") and up to six blocked agents elsewhere, each clickable
-  (`agent.focus`).
+  another terminal waits, "Next waiting" (its space, tab, then
+  `pane.focus`).
+  Otherwise: "Nothing in this tab is waiting for you." ("This terminal
+  isn't waiting; another one in this tab is." when a sibling waits, "No
+  terminal in this tab." when there is none) and up to six other waiting
+  terminals, this tab's included, each clickable the same way.
 - Question, Details and Transcript each read the session of the agent they
   show every 3s, and at once when that agent changes. A transcript is only
   re-read when its size changed.
@@ -140,11 +150,17 @@ own, and no fonts are set.
   `pane.js`, `answer.js`, `detail.js`, `transcript.js`, `switch.js`, with
   shared marks, chips, cards, buttons and the current-agent rule in
   `look.js`, and the Claude session reading in `session.js`:
+  - `fleet.js` runs `claude agents --json` and maps each running session
+    to a Herdr terminal by pid (`hc get`), shared under `overwatch.fleet`;
+    `sessionAt(address)` returns a terminal's session, with its name,
+    status and what it waits for. `currentTarget()` / `currentStatus()` in
+    `look.js` use it, so panels follow terminals, not only Herdr agents.
   - `sessionOf(agent)` finds the transcript: a `claude.transcript` or
-    `claude.session` terminal label when one is set, else the newest
-    `.jsonl` files in `~/.claude/projects/<folder slug>/` (skipping team
-    members' transcripts, which name an `agentName`), paired with that
-    folder's Claude Code agents newest to newest by `seq`.
+    `claude.session` terminal label when one is set, else the session
+    `sessionAt` maps to the terminal, else the newest `.jsonl` files in
+    `~/.claude/projects/<folder slug>/` (skipping team members'
+    transcripts, which name an `agentName`), paired with that folder's
+    Claude Code agents newest to newest by `seq`.
   - `load(file)` reads the tail of the transcript and `parse()` turns it
     into the session id, branch, the tool call waiting for a result, its
     question, tasks (from `TaskCreate`/`TaskUpdate`, else the last
@@ -166,22 +182,31 @@ own, and no fonts are set.
   - `ls -t`, `head -c 4096`, `wc -c` to find and size transcripts;
     `sh -c 'tail -c 6000000 | grep -E "type":"(user|assistant)" | tail -c
     1000000'` to read one; `grep -ohE` for its title.
-  - `gh pr view --json number,title,state,url` in the agent's folder (the
-    only network call, done by `gh`).
+  - `gh pr view --json number,title,state,url,statusCheckRollup` in the
+    agent's folder (the only network call, done by `gh`).
+  - `claude agents --json` and `hc get <terminal>` to map sessions to
+    terminals by pid.
 - **Timers:** the tree looks for new folders every 2s (git only for unseen
-  ones); Question, Details and Transcript poll their agent's session every
-  3s; rail and details redraw every 30s for the "working" times.
+  ones) and refreshes the Claude session list every 5s; Question, Details
+  and Transcript poll their agent's session every 3s; rail and details
+  redraw every 30s for the "working" times. Pane marks keep Herdr's status
+  and fall back to the session's; tab and space marks take the most urgent
+  of Herdr's and their panes'.
 - **Shipped art it borrows:** `mods/workspace-chrome/spinner.svg` and
   `branch.svg`, `mods/pane/{split-right,split-down,zoom,unzoom,close}.svg`.
 
 ## Watch out
 
-- **The transcript is a guess.** Herdr doesn't say which Claude session an
-  agent is. Without a `claude.transcript` / `claude.session` label, it
-  pairs the folder's Claude Code agents with its newest transcripts by
-  recency. Two agents in one folder can swap, a resumed old session can
-  show a newer one, and a fresh agent shows the previous session until it
-  writes. A hook that sets the label fixes it.
+- **The session link comes from `claude agents --json`.** Herdr doesn't
+  say which Claude session a terminal runs, so the session list is matched
+  to terminals by pid. When `claude` can't list sessions, or a terminal's
+  session isn't in that list, it falls back to a guess: the folder's
+  Claude Code agents paired with its newest transcripts by recency, where
+  two agents in one folder can swap.
+- **The session list refreshes from the tree**, as the Dev10x desk's does
+  from its sidebar. If a hidden sidebar (`layout.toggle`) stops the tree's
+  timers, Question, Details and Transcript keep the last list until it
+  shows again; not checked in the app yet.
 - **Only the tail is read** (last 6MB, then at most 1MB of conversation
   lines). On long sessions, tasks created earlier are missing or show as
   "Task #N", the recent calls and messages are the latest only, and the
@@ -215,11 +240,13 @@ own, and no fonts are set.
 
 - `herdr-app check mods/overwatch` passes.
 - The tree lists every space, tab and terminal pane, with worktree spaces
-  under their repo, and its marks match `herdr-app ls`.
+  under their repo, and its marks match `herdr-app ls` for Herdr agents
+  (a Claude session started in a shell adds its own status).
 - Clicking a tab shows its terminals in the middle and updates the rail.
 - A blocked agent in the shown tab fills Question with "needs you" and "Go
-  to its terminal" focuses it; one in another tab shows under "waiting
-  elsewhere" and "Next waiting" goes there.
+  to its terminal" focuses it, unless another agent or session there has
+  focus; then it, like one in another tab, shows under "N more waiting"
+  and "Next waiting" goes there.
 - A Claude Code agent asking one single-pick question shows its options;
   clicking one answers it in the terminal. One waiting on a tool shows
   "<tool> wants to run".
