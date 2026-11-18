@@ -1,6 +1,7 @@
 import { div, svg, image } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
-import { agents, home, panes, spaces } from "herdr";
+import { agents, home, panes, run, spaces } from "herdr";
+import { sessionAt, STATUS } from "./fleet.js";
 
 export const RANK = { blocked: 4, done: 3, working: 2, idle: 1 };
 
@@ -10,6 +11,23 @@ const SPINNER = "mods/workspace-chrome/spinner.svg";
 
 export function strongest(statuses) {
   return statuses.reduce((best, s) => ((RANK[s] ?? 0) > (RANK[best] ?? 0) ? s : best), null);
+}
+
+export function paneStatus(p) {
+  return strongest([p.status, STATUS[sessionAt(p.terminal)?.status]]);
+}
+
+// Every terminal in this window that waits for the person, the shown tab's included.
+export function waitingHere() {
+  return spaces().flatMap((space) => space.tabs.flatMap((tab) => panes()
+    .filter((p) => p.tab === tab.id && p.terminal && paneStatus(p) === "blocked")
+    .map((p) => ({ address: p.terminal, space, tab, name: sessionAt(p.terminal)?.name ?? p.program?.name ?? p.title }))));
+}
+
+export function goTo({ address, space, tab }) {
+  run("space.select", { id: space.id });
+  run("tab.select", { id: tab.id });
+  run("pane.focus", { terminal: address });
 }
 
 export function mark(t, status) {
@@ -64,16 +82,24 @@ export function activeTab() {
   return activeSpace()?.tabs.find((t) => t.active) ?? null;
 }
 
-// The agent the right column talks about: the focused pane's agent when it's in the
-// shown tab, else the shown tab's most urgent agent.
-export function currentAgent() {
+// Claude Code started in a shell isn't an agent to Herdr, so a pane with a Claude session counts as one.
+export function currentTarget() {
   const tab = activeTab();
   if (!tab) return null;
-  const mine = agents().filter((a) => a.tab === tab.id);
-  const focusedPane = panes().find((p) => p.focused && p.tab === tab.id);
-  return mine.find((a) => a.pane === focusedPane?.pane)
-    ?? [...mine].sort((x, y) => RANK[y.status] - RANK[x.status] || y.seq - x.seq)[0]
-    ?? null;
+  const mine = panes().filter((p) => p.tab === tab.id && p.terminal);
+  const all = agents();
+  const agentIn = (p) => all.find((a) => a.pane === p.pane) ?? null;
+  const rank = (p) => RANK[paneStatus(p)] ?? 0;
+  const focused = mine.find((each) => each.focused);
+  const urgent = mine.reduce((best, each) => (rank(each) > (best ? rank(best) : 0) ? each : best), null);
+  const p = (focused && (sessionAt(focused.terminal) || agentIn(focused)) ? focused : null) ?? urgent ?? focused ?? mine[0];
+  if (!p) return null;
+  const agent = agentIn(p);
+  return { address: agent?.address ?? p.terminal, pane: p.pane, app: agent?.app ?? p.app, agent, status: paneStatus(p) };
+}
+
+export function currentStatus() {
+  return currentTarget()?.status ?? null;
 }
 
 export function heading(t, text) {

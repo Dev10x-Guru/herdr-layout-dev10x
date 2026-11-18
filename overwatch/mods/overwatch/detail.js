@@ -1,7 +1,8 @@
 import { div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { panes, run, settings, terminals, theme } from "herdr";
-import { activeTab, card, chip, currentAgent, heading, mark, programIcon, quiet, shortPath, since } from "./look.js";
+import { sessionAt } from "./fleet.js";
+import { activeTab, card, chip, currentStatus, currentTarget, heading, mark, paneName, programIcon, quiet, shortPath, since } from "./look.js";
 import { SessionWatch, ticketOf } from "./session.js";
 
 function fact(t, label, value) {
@@ -23,21 +24,23 @@ function line(t, left, text, color) {
 export class Detail {
   init(cx) {
     this.watch = new SessionWatch({ withPr: true });
-    this.watch.start(cx, currentAgent);
+    this.watch.start(cx, currentTarget);
     this.showDone = false;
     cx.timer.every(30000, (cx) => cx.notify());
   }
 
-  agentSection(t, agent, tab) {
+  agentSection(t, agent, tab, running) {
     const p = panes().find((each) => each.pane === agent.pane);
+    const program = agent.agent?.program ?? p?.program;
     const kids = terminals().filter((k) => k.parent === agent.address && k.state === "live");
     return v_flex().flex_none().gap(8)
       .child(h_flex().gap(8).items_center()
-        .child(programIcon(agent.program, 16, t.foreground) ?? div().w(16).flex_none())
+        .child(programIcon(program, 16, t.foreground) ?? div().w(16).flex_none())
         .child(div().flex_1().min_w(0).truncate().text_size(14).font_semibold().text_color(t.foreground)
-          .child(agent.program.name))
-        .child(chip(t, agent.status) ?? div()))
-      .child(fact(t, "Title", agent.title))
+          .child(running?.name ?? agent.agent?.program.name ?? (p ? paneName(p) : "shell")))
+        .child(chip(t, currentStatus()) ?? div()))
+      .when(!!running?.waitingFor, (el) => el.child(fact(t, "Waiting for", running.waitingFor)))
+      .child(fact(t, "Title", agent.agent?.title ?? p?.title))
       .child(fact(t, "Terminal", agent.address))
       .child(fact(t, "Folder", shortPath(p?.cwd)))
       .child(fact(t, "Branch", p?.branch))
@@ -66,9 +69,9 @@ export class Detail {
     ].filter(Boolean));
   }
 
-  waitingCard(t, s, agent) {
+  waitingCard(t, s) {
     const w = s.waiting;
-    const title = agent.status === "blocked" ? "Waiting to run" : "Running";
+    const title = currentStatus() === "blocked" ? "Waiting to run" : "Running";
     return card(t, title, w.name, [
       div().text_size(12).font_family(settings().font_family ?? "JetBrains Mono").text_color(t.foreground).child(w.target || "—"),
     ]);
@@ -95,20 +98,21 @@ export class Detail {
   render(cx) {
     const t = theme();
     const tab = activeTab();
-    const agent = currentAgent();
+    const agent = currentTarget();
     this.watch.follow(cx);
     const s = this.watch.of(agent);
+    const running = agent ? sessionAt(agent.address) : null;
     return v_flex().size_full().min_h(0).p(14).gap(14).overflow_y_scrollbar()
       .child(heading(t, "Session"))
-      .child(agent ? this.agentSection(t, agent, tab) : quiet(t, "No agent runs in this tab."))
-      .when(!!agent && !s, (el) => el.child(quiet(t, agent.app !== "claude-code"
-        ? "Session details come from Claude Code transcripts; this agent isn't Claude Code."
+      .child(agent ? this.agentSection(t, agent, tab, running) : quiet(t, "No terminal in this tab."))
+      .when(!!agent && !s, (el) => el.child(quiet(t, agent.app !== "claude-code" && !running
+        ? "Session details come from Claude Code transcripts; this terminal doesn't run Claude Code."
         : this.watch.address === agent.address
-          ? "No Claude transcript found for this agent's folder."
+          ? "No Claude transcript found for this terminal."
           : "Looking for its Claude session…")))
       .when(!!s?.title, (el) => el.child(card(t, s.title, s.sessionId?.slice(0, 8), [])))
       .when(!!s && s.tasks.length > 0, (el) => el.child(this.tasksCard(t, s)))
-      .when(!!s?.waiting, (el) => el.child(this.waitingCard(t, s, agent)))
+      .when(!!s?.waiting, (el) => el.child(this.waitingCard(t, s)))
       .when(!!s && s.recent.length > 0, (el) => el.child(this.recentCard(t, s)))
       .when(!!s, (el) => el.child(this.prCard(t, s, agent)));
   }

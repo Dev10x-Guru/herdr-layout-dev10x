@@ -1,7 +1,8 @@
 import { div } from "gpui-kit";
 import { v_flex } from "gpui-base";
 import { theme } from "herdr";
-import { currentAgent, heading, quiet } from "./look.js";
+import { sessionAt } from "./fleet.js";
+import { currentTarget, heading, quiet } from "./look.js";
 import { SessionWatch } from "./session.js";
 
 function bubble(t, m) {
@@ -16,21 +17,21 @@ function bubble(t, m) {
 export class Transcript {
   init(cx) {
     this.watch = new SessionWatch();
-    this.watch.start(cx, currentAgent);
+    this.watch.start(cx, currentTarget);
   }
 
   render(cx) {
     const t = theme();
-    const agent = currentAgent();
+    const agent = currentTarget();
     this.watch.follow(cx);
     const s = this.watch.of(agent);
     const body = v_flex().size_full().min_h(0).p(14).gap(8).overflow_y_scrollbar()
       .child(heading(t, "Transcript"));
-    if (!agent) return body.child(quiet(t, "No agent runs in this tab."));
+    if (!agent) return body.child(quiet(t, "No terminal in this tab."));
     if (!s) {
-      return body.child(quiet(t, agent.app === "claude-code"
-        ? "No Claude transcript read for this agent yet."
-        : "Transcripts come from Claude Code; this agent isn't Claude Code."));
+      return body.child(quiet(t, agent.app === "claude-code" || sessionAt(agent.address)
+        ? "No Claude transcript read for this terminal yet."
+        : "Transcripts come from Claude Code; this terminal doesn't run Claude Code."));
     }
     return body
       .when(s.partial, (el) => el.child(quiet(t, `The last ${s.messages.length} messages; newest at the bottom.`)))

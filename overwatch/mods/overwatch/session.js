@@ -1,4 +1,5 @@
 import { agents, exec, home, panes, terminals } from "herdr";
+import { sessionAt } from "./fleet.js";
 
 // Transcripts reach several MB, mostly attachments and API logs: scan the last SCAN_BYTES,
 // keep only conversation lines, and parse at most KEEP_BYTES of them.
@@ -53,15 +54,18 @@ async function sizeOf(path) {
   return { path, size: Number(r.stdout.trim().split(/\s+/)[0]) };
 }
 
-// The transcript behind an agent: a label when Herdr or a hook set one, else the newest
-// transcripts in its folder, paired with that folder's Claude agents by recency.
+// The transcript behind a terminal (`currentTarget()`): a label when Herdr or a hook set one;
+// the session `claude agents` runs in that terminal; else, for a Claude Code agent, the newest
+// transcripts in its folder paired with that folder's Claude agents by recency.
 export async function sessionOf(agent) {
   if (!agent) return null;
   const labels = labelsOf(agent.address);
   const cwd = paneCwd(agent);
   if (labels["claude.transcript"]) return sizeOf(labels["claude.transcript"]);
   if (labels["claude.session"] && cwd) return sizeOf(`${projectDir(cwd)}/${labels["claude.session"]}.jsonl`);
-  if (agent.app !== "claude-code" || !cwd) return null;
+  const running = sessionAt(agent.address);
+  if (running) return sizeOf(`${projectDir(running.cwd)}/${running.sessionId}.jsonl`);
+  if (!cwd || agent.app !== "claude-code") return null;
   const siblings = agents().filter((a) => a.app === "claude-code" && paneCwd(a) === cwd)
     .sort((x, y) => y.seq - x.seq);
   const wanted = Math.max(0, siblings.findIndex((a) => a.address === agent.address));
@@ -196,12 +200,12 @@ export async function load(file) {
   return data;
 }
 
-export async function prOf(cwd, branch) {
+export async function prOf(cwd, branch, ttl = PR_TTL_MS) {
   if (!cwd || !branch) return null;
   const key = `${cwd}\n${branch}`;
   const hit = prs.get(key);
-  if (hit && Date.now() - hit.at < PR_TTL_MS) return hit.value;
-  const r = await exec("gh", ["pr", "view", "--json", "number,title,state,url"], { cwd }).catch(() => null);
+  if (hit && Date.now() - hit.at < ttl) return hit.value;
+  const r = await exec("gh", ["pr", "view", "--json", "number,title,state,url,statusCheckRollup"], { cwd }).catch(() => null);
   let value = null;
   try { value = r?.code === 0 ? JSON.parse(r.stdout) : null; } catch { value = null; }
   prs.set(key, { at: Date.now(), value });
