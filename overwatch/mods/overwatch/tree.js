@@ -1,10 +1,18 @@
 import { div, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
-import { agents, exec, openOverlay, panes, run, setAgentOrder, spaces, theme } from "herdr";
-import { mark, paneName, programIcon } from "./look.js";
+import { exec, openOverlay, panes, run, setAgentOrder, spaces, theme } from "herdr";
+import { refreshFleet, sessionAt, STATUS } from "./fleet.js";
+import { mark, paneName, programIcon, strongest } from "./look.js";
 
 const ROW = 28;
 const INDENT = 16;
+const FLEET_MS = 5000;
+
+// Herdr's status wins; Claude Code started in a shell has none, so its fleet session's stands in.
+const paneMark = (p) => p.status ?? STATUS[sessionAt(p.terminal)?.status] ?? null;
+// A tab or space with any Herdr agent has a status of its own; a waiting shell session must still win over it.
+const tabMark = (tab, ps) => strongest([tab.status, ...ps.filter((p) => p.tab === tab.id && p.terminal).map(paneMark)]);
+const spaceMark = (space, ps) => strongest([space.status, ...space.tabs.map((tab) => tabMark(tab, ps))]);
 
 function place(space, ps) {
   const tabs = new Set(space.tabs.map((t) => t.id));
@@ -30,10 +38,28 @@ export class Tree {
   init(cx) {
     this.git = {};
     this.looking = false;
+    this.reading = false;
     this.folded = loadSet("folded");
     this.needsOnly = localStorage.getItem("needsOnly") === "1";
     cx.timer.every(2000, (cx) => this.look(cx));
+    cx.timer.every(FLEET_MS, (cx) => this.readFleet(cx));
     this.look(cx);
+    this.readFleet(cx);
+  }
+
+  // The tree is the layout's one long-lived part, so it alone refreshes the fleet the others read.
+  readFleet(cx) {
+    if (this.reading) return;
+    this.reading = true;
+    cx.spawn(async () => {
+      try {
+        await refreshFleet();
+      } catch (e) {
+        console.log(`overwatch fleet: ${e}`);
+      } finally {
+        this.reading = false;
+      }
+    });
   }
 
   look(cx) {
@@ -99,7 +125,7 @@ export class Tree {
       }))
       .child(this.caret(t, s.id, open))
       .when(worktree, (el) => el.child(svg("mods/workspace-chrome/branch.svg").size(12).flex_none().text_color(t.dim)))
-      .child(mark(t, s.status))
+      .child(mark(t, spaceMark(s, panes())))
       .child(div().flex_shrink(0).max_w(150).truncate().font_medium()
         .text_color(s.active ? t.foreground : t.muted).child(s.name))
       .child(div().flex_1().min_w(0).truncate().text_size(11.5).text_color(t.dim)
@@ -115,7 +141,7 @@ export class Tree {
         run("tab.select", { id: tab.id });
       })
       .child(this.caret(t, tab.id, open))
-      .child(mark(t, tab.status))
+      .child(mark(t, tabMark(tab, panes())))
       .child(div().flex_1().min_w(0).truncate()
         .text_color(tab.active ? t.foreground : t.muted).child(tab.name))
       .child(div().flex_none().text_size(11).text_color(t.dim).child(String(tab.panes)));
@@ -129,7 +155,7 @@ export class Tree {
         run("pane.focus", { pane: p.pane });
       })
       .child(div().w(14).flex_none())
-      .child(mark(t, p.status))
+      .child(mark(t, paneMark(p)))
       .child(programIcon(p.program, 13, t.dim) ?? div().w(13).flex_none())
       .child(div().flex_1().min_w(0).truncate().text_size(12.5)
         .text_color(p.focused ? t.foreground : t.muted).child(paneName(p)));
@@ -140,16 +166,16 @@ export class Tree {
     const wanted = (status) => !this.needsOnly || status === "blocked";
     const out = [];
     for (const r of this.ordered()) {
-      if (!wanted(r.s.status)) continue;
+      if (!wanted(spaceMark(r.s, ps))) continue;
       out.push(this.spaceRow(t, r));
       if (this.folded.has(r.s.id)) continue;
       const depth = r.worktree ? 2 : 1;
       for (const tab of r.s.tabs) {
-        if (!wanted(tab.status)) continue;
+        if (!wanted(tabMark(tab, ps))) continue;
         out.push(this.tabRow(t, r.s, tab, depth));
         if (this.folded.has(tab.id)) continue;
         for (const p of ps.filter((p) => p.tab === tab.id && p.terminal)) {
-          if (!wanted(p.status)) continue;
+          if (!wanted(paneMark(p))) continue;
           out.push(this.paneRow(t, r.s, p, depth + 1));
         }
       }
@@ -157,9 +183,10 @@ export class Tree {
     return out;
   }
 
-  header(t, list) {
-    const blocked = list.filter((a) => a.status === "blocked").length;
-    const working = list.filter((a) => a.status === "working").length;
+  header(t) {
+    const marks = panes().filter((p) => p.terminal).map(paneMark).filter(Boolean);
+    const blocked = marks.filter((s) => s === "blocked").length;
+    const working = marks.filter((s) => s === "working").length;
     return v_flex().flex_none().px(14).pt(12).pb(8).gap(6)
       .child(h_flex().items_center().justify_between()
         .child(div().text_size(11).font_semibold().text_color(t.dim).child("OVERWATCH"))
@@ -171,7 +198,7 @@ export class Tree {
         .text_color(blocked ? t.blocked : t.foreground)
         .child(blocked ? `${blocked} need${blocked === 1 ? "s" : ""} you` : "Nothing waits for you"))
       .child(h_flex().gap(10).items_center().text_size(11.5).text_color(t.muted)
-        .child(`${working} working · ${list.length} agents · ${spaces().length} spaces`)
+        .child(`${working} working · ${marks.length} agents · ${spaces().length} spaces`)
         .child(div().flex_1())
         .child(div().id("ow-needs-only").px(6).h(20).flex().items_center().rounded(5)
           .when(this.needsOnly, (el) => el.bg(t.blocked + "26").text_color(t.blocked))
@@ -186,13 +213,12 @@ export class Tree {
 
   render() {
     const t = theme();
-    const list = agents();
     const rows = this.rows(t);
     const ps = panes();
     setAgentOrder(this.ordered().flatMap((r) => r.s.tabs.flatMap((tab) =>
       ps.filter((p) => p.tab === tab.id && p.status && p.terminal).map((p) => p.terminal))));
     return v_flex().size_full().min_h(0).bg(t.chrome)
-      .child(this.header(t, list))
+      .child(this.header(t))
       .child(v_flex().flex_1().min_h(0).px(6).pb(12).overflow_y_scrollbar()
         .children(rows.length ? rows : [div().px(10).py(8).text_size(12).text_color(t.muted)
           .child(this.needsOnly ? "No agent needs you." : "No spaces yet.")]));
